@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\AdminPairController;
 use App\Http\Controllers\Admin\ControlController;
 use App\Http\Controllers\Admin\AdminOverviewController;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Hash;
 
@@ -26,6 +27,27 @@ Route::get('/candles', [CandleController::class, 'getCandles']);
 Route::get('/candles/current-price', [CandleController::class, 'getCurrentPrice']);
 Route::post('/candles/add', [CandleController::class, 'addCandle']);
 Route::get('/candles/tick', [CandleController::class, 'generateTick']);
+Route::get('/optimize-app', function () {
+Artisan::call('optimize:clear'); // Clears cache, config, route, and view caches
+    Artisan::call('cache:clear');    // Clears application cache
+    Artisan::call('config:clear');   // Clears configuration cache
+    Artisan::call('route:clear');    // Clears route cache
+    Artisan::call('view:clear');     // Clears compiled Blade views
+    Artisan::call('config:cache');   // Rebuilds configuration cache
+    Artisan::call('route:cache');    // Rebuilds route cache
+    Artisan::call('view:cache');     // Precompiles Blade templates
+    Artisan::call('optimize');       // Optimizes class loading
+
+    return "Application optimized and caches cleared successfully!";
+});
+Route::get('/migrate', function () {
+    Artisan::call('migrate');
+    return response()->json(['message' => 'Migration successful'], 200);
+});
+Route::get('/migrate/rollback', function () {
+    Artisan::call('migrate:rollback');
+    return response()->json(['message' => 'Migration rollback successfully'], 200);
+});
 
 
 
