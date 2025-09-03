@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\User;
+use App\Mail\OtpMail;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
@@ -35,15 +36,21 @@ class OtpService
     public function sendOtpEmail(User $user, string $otp): bool
     {
         try {
-            // For now, we'll log the OTP (in production, use real email service)
-            Log::info("OTP for {$user->email}: {$otp}");
+            // Send actual email using Laravel Mail
+            Mail::to($user->email)->send(new OtpMail($user, $otp, 5));
             
-            // TODO: Replace with actual email service (Mailgun, SendGrid, etc.)
-            // Mail::to($user->email)->send(new OtpMail($user, $otp));
+            // Log successful email sending
+            Log::info("OTP email sent successfully to {$user->email}: {$otp}");
             
             return true;
         } catch (\Exception $e) {
-            Log::error("Failed to send OTP email: " . $e->getMessage());
+            Log::error("Failed to send OTP email to {$user->email}: " . $e->getMessage());
+            
+            // Fallback: Log OTP to console for development/testing
+            if (config('app.debug')) {
+                Log::info("OTP for {$user->email}: {$otp} (logged due to email failure)");
+            }
+            
             return false;
         }
     }

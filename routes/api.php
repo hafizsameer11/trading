@@ -30,6 +30,15 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::post('/verify-otp', [AuthController::class, 'verifyOtp']);
 Route::post('/resend-otp', [AuthController::class, 'resendOtp']);
 
+// Email configuration check (for debugging)
+Route::get('/email/check', function () {
+    $emailService = app(\App\Services\EmailConfigService::class);
+    return response()->json([
+        'status' => $emailService->getEmailStatus(),
+        'configured' => $emailService->isEmailConfigured(),
+    ]);
+});
+
 Route::get('/pairs', [PairController::class, 'index']);
 Route::get('/candles/current-price', [CandleController::class, 'getCurrentPrice']);
 Route::get('/candles', [CandleController::class, 'getCandles']);
