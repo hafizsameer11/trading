@@ -71,3 +71,4 @@ class RealTimeDataGeneratorCommand extends Command
         $this->shouldStop = true;
     }
 }
+

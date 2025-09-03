@@ -63,3 +63,4 @@ class ContinuousDataGeneratorCommand extends Command
         }
     }
 }
+

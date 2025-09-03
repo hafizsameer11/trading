@@ -53,3 +53,4 @@ class GenerateMarketDataCommand extends Command
         return 0;
     }
 }
+
