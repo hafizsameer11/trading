@@ -63,6 +63,7 @@ Route::get('/email/check', function () {
 Route::get('/pairs', [PairController::class, 'index']);
 Route::get('/candles/current-price', [CandleController::class, 'getCurrentPrice']);
 Route::get('/candles', [CandleController::class, 'getCandles']);
+Route::get('/candles/next', [CandleController::class, 'getNextCandle']);
 
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {

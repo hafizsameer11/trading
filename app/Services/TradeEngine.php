@@ -31,6 +31,7 @@ class TradeEngine
             // Update trade
             $trade->update([
                 'result' => $result,
+                'closing_price' => $closePrice,
                 'settled_at' => now(),
             ]);
             

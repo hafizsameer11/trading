@@ -253,27 +253,30 @@ class OtcPriceService
         $candles = [];
         $currentPrice = $this->getOrSeedSpot($pair);
         $now = time();
-        $momentum = 0.0;
         
-        for ($i = $limit - 1; $i >= 0; $i--) {
-            $timestamp = $now - ($i * $timeframe);
+        // Start from a fixed point in the past to ensure consistent data
+        $startTime = $now - ($limit * $timeframe);
+        
+        // Generate continuous candles with NO GAPS
+        for ($i = 0; $i < $limit; $i++) {
+            $timestamp = $startTime + ($i * $timeframe);
             
-            // Generate more realistic candle data with momentum
+            // Generate realistic price movement
+            $priceChange = $this->calculateSmoothPriceChange($pair, $currentPrice, $i, $limit);
+            $close = $currentPrice + $priceChange;
+            
+            // Ensure price stays within reasonable bounds
+            $close = max($close, $currentPrice * 0.8);
+            $close = min($close, $currentPrice * 1.2);
+            
+            // Generate OHLC data
             $open = $currentPrice;
-            
-            // Calculate realistic price movement
-            $baseChange = $this->calculateRealisticChange($pair, $currentPrice, $momentum);
-            $close = $currentPrice + $baseChange;
-            
-            // Ensure price doesn't go negative
-            $close = max($close, $currentPrice * 0.5);
-            
-            // Generate realistic high/low based on open/close
-            $priceRange = abs($close - $open);
             $volatility = $this->calculateVolatility($pair, $currentPrice);
             
-            $high = max($open, $close) + ($volatility * 0.3);
-            $low = min($open, $close) - ($volatility * 0.3);
+            // Create realistic high/low
+            $priceRange = abs($close - $open);
+            $high = max($open, $close) + ($volatility * 0.2);
+            $low = min($open, $close) - ($volatility * 0.2);
             
             // Ensure high/low make sense
             $high = max($high, max($open, $close));
@@ -285,15 +288,43 @@ class OtcPriceService
                 'h' => round($high, $pair->price_precision),
                 'l' => round($low, $pair->price_precision),
                 'c' => round($close, $pair->price_precision),
+                'v' => 1000,
             ];
             
-            // Update momentum and price for next iteration
-            $momentum = ($close - $open) / $open; // Price change percentage
-            $momentum = max(-0.02, min(0.02, $momentum)); // Clamp to ±2%
+            // Update price for next candle
             $currentPrice = $close;
         }
         
         return $candles;
+    }
+    
+    private function calculateSmoothPriceChange(Pair $pair, float $currentPrice, int $index, int $total): float
+    {
+        // Create smooth, realistic price movement
+        $baseVolatility = match ($pair->volatility) {
+            'LOW' => 0.0001,   // 0.01%
+            'MID' => 0.0003,   // 0.03%
+            'HIGH' => 0.0005,   // 0.05%
+            default => 0.0003,
+        };
+        
+        // Add some trend based on pair trend mode
+        $trendFactor = match ($pair->trend_mode) {
+            'UP' => 0.0001,
+            'DOWN' => -0.0001,
+            'SIDEWAYS' => 0,
+            default => 0,
+        };
+        
+        // Add random component
+        $randomFactor = (mt_rand(-100, 100) / 100000); // ±0.1%
+        
+        // Calculate total change
+        $totalChange = $currentPrice * ($baseVolatility + $trendFactor + $randomFactor);
+        
+        // Clamp to reasonable range
+        $maxChange = $currentPrice * 0.002; // Max 0.2% change per candle
+        return max(-$maxChange, min($maxChange, $totalChange));
     }
     
     private function calculateRealisticChange(Pair $pair, float $currentPrice, float $momentum): float
@@ -320,12 +351,48 @@ class OtcPriceService
         return max(-$maxChange, min($maxChange, $change));
     }
 
-    public function addCandle(Pair $pair, int $timeframe, array $candle): void
+    public function addCandle(Pair $pair, int $timeframe, array $tick): void
     {
         $cacheKey = "otc:candles:{$pair->id}:{$timeframe}";
         $candles = Cache::get($cacheKey, []);
         
-        $candles[] = $candle;
+        // Get current timestamp and calculate the bucket for this timeframe
+        $currentTime = $tick['ts'] ?? time();
+        $bucketTime = floor($currentTime / $timeframe) * $timeframe;
+        
+        // Find existing candle for this time bucket
+        $existingCandleIndex = null;
+        foreach ($candles as $index => $candle) {
+            if (isset($candle['t']) && $candle['t'] == $bucketTime) {
+                $existingCandleIndex = $index;
+                break;
+            }
+        }
+        
+        if ($existingCandleIndex !== null) {
+            // Update existing candle
+            $existingCandle = &$candles[$existingCandleIndex];
+            $existingCandle['h'] = max($existingCandle['h'], $tick['h']);
+            $existingCandle['l'] = min($existingCandle['l'], $tick['l']);
+            $existingCandle['c'] = $tick['c']; // Close is always the latest tick
+            $existingCandle['v'] = ($existingCandle['v'] ?? 0) + ($tick['v'] ?? 1000);
+        } else {
+            // Create new candle for this time bucket
+            $newCandle = [
+                't' => $bucketTime,
+                'o' => $tick['o'],
+                'h' => $tick['h'],
+                'l' => $tick['l'],
+                'c' => $tick['c'],
+                'v' => $tick['v'] ?? 1000,
+            ];
+            $candles[] = $newCandle;
+        }
+        
+        // Sort candles by time
+        usort($candles, function($a, $b) {
+            return ($a['t'] ?? 0) - ($b['t'] ?? 0);
+        });
         
         // Keep only last 1000 candles
         if (count($candles) > 1000) {
@@ -336,13 +403,12 @@ class OtcPriceService
         
         // Also save to database for persistence
         try {
-            // Handle both formats: ['o', 'h', 'l', 'c', 'ts'] and ['open', 'high', 'low', 'close', 'timestamp']
-            $timestamp = $candle['ts'] ?? $candle['timestamp'] ?? time();
-            $open = $candle['o'] ?? $candle['open'] ?? 0;
-            $high = $candle['h'] ?? $candle['high'] ?? 0;
-            $low = $candle['l'] ?? $candle['low'] ?? 0;
-            $close = $candle['c'] ?? $candle['close'] ?? 0;
-            $volume = $candle['v'] ?? $candle['volume'] ?? 1000;
+            $timestamp = $bucketTime;
+            $open = $tick['o'];
+            $high = $tick['h'];
+            $low = $tick['l'];
+            $close = $tick['c'];
+            $volume = $tick['v'] ?? 1000;
             
             \App\Models\MarketData::updateOrCreate(
                 [

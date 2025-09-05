@@ -17,6 +17,7 @@ class Trade extends Model
         'direction',
         'amount',
         'entry_price',
+        'closing_price',
         'expiry_at',
         'result',
         'settled_at',
@@ -27,6 +28,7 @@ class Trade extends Model
     protected $casts = [
         'amount' => 'decimal:2',
         'entry_price' => 'decimal:8',
+        'closing_price' => 'decimal:8',
         'expiry_at' => 'datetime',
         'settled_at' => 'datetime',
         'payout_rate' => 'decimal:2',

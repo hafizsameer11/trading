@@ -25,18 +25,21 @@ class OtcTickCommand extends Command
         $activeOtcPairs = Pair::active()->otc()->get();
 
         foreach ($activeOtcPairs as $pair) {
-            $candle = $this->otcService->nextTick($pair);
+            // Generate a single tick
+            $tick = $this->otcService->nextTick($pair);
             
-            // Add candle to cache for each timeframe
-            $timeframes = [5, 10, 15, 30, 60, 120, 300, 900, 1800, 3600];
+            // All timeframes from single tick stream
+            $timeframes = [5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 14400];
             
             foreach ($timeframes as $timeframe) {
+                // Use the proper addCandle method that handles timeframe logic
                 $this->otcService->addCandle($pair, $timeframe, [
-                    't' => $candle['ts'],
-                    'o' => $candle['open'],
-                    'h' => $candle['high'],
-                    'l' => $candle['low'],
-                    'c' => $candle['close'],
+                    'ts' => $tick['ts'],
+                    'o' => $tick['o'],
+                    'h' => $tick['h'],
+                    'l' => $tick['l'],
+                    'c' => $tick['c'],
+                    'v' => 1000, // Default volume
                 ]);
             }
         }

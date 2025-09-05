@@ -83,12 +83,12 @@ class CandleController extends Controller
                 ->get()
                 ->map(function ($candle) {
                     return [
-                        't' => $candle->timestamp,
+                        't' => (int) $candle->timestamp,
                         'o' => (float) $candle->open,
                         'h' => (float) $candle->high,
                         'l' => (float) $candle->low,
                         'c' => (float) $candle->close,
-                        'v' => (float) $candle->volume,
+                        'v' => (float) ($candle->volume ?? 1000),
                     ];
                 })
                 ->reverse()
@@ -117,7 +117,17 @@ class CandleController extends Controller
                     );
                 }
                 
-                $candles = collect($backfillCandles);
+                // 🔧 Normalize: ts -> t for API response
+                $candles = collect($backfillCandles)->map(function($c) {
+                    return [
+                        't' => (int)$c['ts'],
+                        'o' => (float)$c['o'],
+                        'h' => (float)$c['h'],
+                        'l' => (float)$c['l'],
+                        'c' => (float)$c['c'],
+                        'v' => isset($c['v']) ? (float)$c['v'] : 1000,
+                    ];
+                });
             }
 
             return response()->json($candles);
@@ -152,6 +162,54 @@ class CandleController extends Controller
             return response()->json(['message' => 'Candle added successfully']);
         } catch (\Exception $e) {
             return response()->json(['error' => 'Failed to add candle'], 500);
+        }
+    }
+
+    public function getNextCandle(Request $request): JsonResponse
+    {
+        $pairSymbol = $request->query('pair');
+        $timeframe = (int) $request->query('timeframe', 60);
+        
+        if (!$pairSymbol) {
+            return response()->json(['error' => 'Pair symbol is required'], 400);
+        }
+
+        $backendSymbol = $this->convertPairFormat($pairSymbol);
+        $pair = Pair::where('symbol', $backendSymbol)->first();
+        
+        if (!$pair) {
+            return response()->json(['error' => 'Pair not found: ' . $backendSymbol], 404);
+        }
+
+        try {
+            $now = time();
+            $currentBucket = floor($now / $timeframe) * $timeframe;
+            
+            // Get the candle for the current time bucket
+            $candle = MarketData::where('pair_id', $pair->id)
+                ->where('timeframe_sec', $timeframe)
+                ->where('timestamp', $currentBucket)
+                ->first();
+            
+            if (!$candle) {
+                // If no candle exists for this time bucket, return null
+                return response()->json(['candle' => null, 'currentTime' => $now, 'bucketTime' => $currentBucket]);
+            }
+            
+            return response()->json([
+                'candle' => [
+                    't' => (int) $candle->timestamp,
+                    'o' => (float) $candle->open,
+                    'h' => (float) $candle->high,
+                    'l' => (float) $candle->low,
+                    'c' => (float) $candle->close,
+                    'v' => (float) ($candle->volume ?? 1000),
+                ],
+                'currentTime' => $now,
+                'bucketTime' => $currentBucket
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to get next candle: ' . $e->getMessage()], 500);
         }
     }
 
