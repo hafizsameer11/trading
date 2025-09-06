@@ -65,8 +65,10 @@ class AdminPairController extends Controller
         ], 201);
     }
 
-    public function update(Request $request, Pair $pair)
+    public function update(Request $request, $id)
     {
+        $pair = Pair::findOrFail($id);
+        
         $request->validate([
             'is_active' => 'boolean',
             'trend_mode' => 'in:UP,DOWN,SIDEWAYS',

@@ -9,8 +9,17 @@ use App\Http\Controllers\PairController;
 use App\Http\Controllers\DepositController;
 use App\Http\Controllers\WithdrawalController;
 use App\Http\Controllers\Admin\AdminOverviewController;
+use App\Http\Controllers\Admin\AdminUserController;
+use App\Http\Controllers\Admin\AdminDepositController;
+use App\Http\Controllers\Admin\AdminWithdrawalController;
 use App\Http\Controllers\Admin\AdminPairController;
 use App\Http\Controllers\Admin\ControlController;
+use App\Http\Controllers\Admin\AdminNotificationController;
+use App\Http\Controllers\Admin\ReportsController;
+use App\Http\Controllers\Admin\PaymentMethodController as AdminPaymentMethodController;
+use App\Http\Controllers\Admin\AdminLogsController;
+use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\PaymentMethodController;
 use Illuminate\Support\Facades\Hash;
 
 /*
@@ -64,6 +73,20 @@ Route::get('/pairs', [PairController::class, 'index']);
 Route::get('/candles/current-price', [CandleController::class, 'getCurrentPrice']);
 Route::get('/candles', [CandleController::class, 'getCandles']);
 Route::get('/candles/next', [CandleController::class, 'getNextCandle']);
+
+// Payment methods
+Route::get('/payment-methods', [PaymentMethodController::class, 'index']);
+Route::get('/payment-methods/{paymentMethod}', [PaymentMethodController::class, 'show']);
+Route::post('/payment-methods/{paymentMethod}/calculate-fee', [PaymentMethodController::class, 'calculateFee']);
+
+// User notifications
+Route::middleware(['auth:sanctum'])->group(function () {
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::get('/notifications/all', [NotificationController::class, 'all']);
+    Route::get('/notifications/count', [NotificationController::class, 'count']);
+    Route::post('/notifications/{notification}/read', [NotificationController::class, 'markAsRead']);
+    Route::post('/notifications/mark-all-read', [NotificationController::class, 'markAllAsRead']);
+});
 
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
@@ -123,10 +146,63 @@ Route::middleware('auth:sanctum')->group(function () {
 
 // Admin routes
 Route::middleware(['auth:sanctum', 'admin'])->group(function () {
+    // Overview
     Route::get('/admin/overview', [AdminOverviewController::class, 'index']);
+    
+    // Users
+    Route::get('/admin/users', [AdminUserController::class, 'index']);
+    Route::get('/admin/users/{user}', [AdminUserController::class, 'show']);
+    Route::get('/admin/users/{user}/trades', [AdminUserController::class, 'getTrades']);
+    Route::put('/admin/users/{user}/balance', [AdminUserController::class, 'updateBalance']);
+    Route::put('/admin/users/{user}/admin', [AdminUserController::class, 'toggleAdmin']);
+    
+    // Deposits
+    Route::get('/admin/deposits', [AdminDepositController::class, 'index']);
+    Route::get('/admin/deposits/{id}', [AdminDepositController::class, 'show']);
+    Route::post('/admin/deposits/{id}/approve', [AdminDepositController::class, 'approve']);
+    Route::post('/admin/deposits/{id}/reject', [AdminDepositController::class, 'reject']);
+    Route::put('/admin/deposits/{id}', [AdminDepositController::class, 'update']);
+    
+    // Withdrawals
+    Route::get('/admin/withdrawals', [AdminWithdrawalController::class, 'index']);
+    Route::get('/admin/withdrawals/{id}', [AdminWithdrawalController::class, 'show']);
+    Route::post('/admin/withdrawals/{id}/approve', [AdminWithdrawalController::class, 'approve']);
+    Route::post('/admin/withdrawals/{id}/reject', [AdminWithdrawalController::class, 'reject']);
+    Route::put('/admin/withdrawals/{id}', [AdminWithdrawalController::class, 'update']);
+    
+    // Pairs
     Route::get('/admin/pairs', [AdminPairController::class, 'index']);
     Route::post('/admin/pairs', [AdminPairController::class, 'store']);
-    Route::put('/admin/pairs/{pair}', [AdminPairController::class, 'update']);
+    Route::put('/admin/pairs/{id}', [AdminPairController::class, 'update']);
+    
+    // Controls
     Route::get('/admin/controls', [ControlController::class, 'show']);
     Route::put('/admin/controls', [ControlController::class, 'update']);
+    
+    // Notifications
+    Route::get('/admin/notifications', [AdminNotificationController::class, 'index']);
+    Route::post('/admin/notifications', [AdminNotificationController::class, 'store']);
+    Route::get('/admin/notifications/{id}', [AdminNotificationController::class, 'show']);
+    Route::put('/admin/notifications/{id}', [AdminNotificationController::class, 'update']);
+    Route::delete('/admin/notifications/{id}', [AdminNotificationController::class, 'destroy']);
+    Route::get('/admin/notifications/stats/overview', [AdminNotificationController::class, 'stats']);
+    Route::get('/admin/notifications/users/search', [AdminNotificationController::class, 'getUsers']);
+    
+    // Reports
+    Route::get('/admin/reports/analytics', [ReportsController::class, 'analytics']);
+    Route::get('/admin/reports/export', [ReportsController::class, 'export']);
+    
+    // Payment Methods
+    Route::get('/admin/payment-methods', [AdminPaymentMethodController::class, 'index']);
+    Route::post('/admin/payment-methods', [AdminPaymentMethodController::class, 'store']);
+    Route::get('/admin/payment-methods/{id}', [AdminPaymentMethodController::class, 'show']);
+    Route::put('/admin/payment-methods/{id}', [AdminPaymentMethodController::class, 'update']);
+    Route::delete('/admin/payment-methods/{id}', [AdminPaymentMethodController::class, 'destroy']);
+    Route::post('/admin/payment-methods/{id}/toggle-status', [AdminPaymentMethodController::class, 'toggleStatus']);
+    
+    // System Logs
+    Route::get('/admin/logs', [AdminLogsController::class, 'index']);
+    Route::get('/admin/logs/stats', [AdminLogsController::class, 'stats']);
+    Route::get('/admin/logs/filters', [AdminLogsController::class, 'filters']);
+    Route::get('/admin/logs/export', [AdminLogsController::class, 'export']);
 });

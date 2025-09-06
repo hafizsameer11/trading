@@ -12,10 +12,13 @@ class Deposit extends Model
 
     protected $fillable = [
         'user_id',
+        'payment_method_id',
         'method',
         'amount',
         'status',
         'proof_url',
+        'transaction_id',
+        'notes',
     ];
 
     protected $casts = [
@@ -25,5 +28,10 @@ class Deposit extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function paymentMethod(): BelongsTo
+    {
+        return $this->belongsTo(PaymentMethod::class);
     }
 }
