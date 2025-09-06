@@ -58,11 +58,11 @@ class AuthController extends Controller
 
         // Check if user is locked
         $user = User::where('email', $request->email)->first();
-        if ($user && $user->isLocked()) {
-            return response()->json([
-                'error' => 'Account is temporarily locked due to too many failed attempts. Please try again in 15 minutes.',
-            ], 423);
-        }
+        // if ($user && $user->isLocked()) {
+        //     return response()->json([
+        //         'error' => 'Account is temporarily locked due to too many failed attempts. Please try again in 15 minutes.',
+        //     ], 423);
+        // }
 
         if (!Auth::attempt($request->only('email', 'password'))) {
             // Increment login attempts
@@ -114,11 +114,11 @@ class AuthController extends Controller
         $user = User::findOrFail($request->user_id);
 
         // Check if user is locked
-        if ($user->isLocked()) {
-            return response()->json([
-                'error' => 'Account is temporarily locked due to too many failed attempts. Please try again in 15 minutes.',
-            ], 423);
-        }
+        // if ($user->isLocked()) {
+        //     return response()->json([
+        //         'error' => 'Account is temporarily locked due to too many failed attempts. Please try again in 15 minutes.',
+        //     ], 423);
+        // }
 
         // Verify OTP
         if (!$this->otpService->verifyOtp($user, $request->otp)) {
@@ -126,7 +126,7 @@ class AuthController extends Controller
             $user->incrementLoginAttempts();
             
             return response()->json([
-                'error' => 'Invalid or expired OTP. Please try again.',
+                'error' => 'Invalid or expired OTP. Please try agaiasdn.',
             ], 400);
         }
 
