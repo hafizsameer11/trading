@@ -17,7 +17,7 @@ use App\Services\LoggingService;
 class MarketRun extends Command
 {
     // protected $signature = 'market:run {--base=1} {--pairs=*}';
-    protected $signature = 'market:run {--base=1} {--pairs=*} {--duration=55}';
+    protected $signature = 'market:run {--base=1} {--pairs=*} {--duration=36055}';
 
     protected $description = 'Generate live market data with SystemControl, realistic zig-zag motion, and win-rate enforcement';
 
@@ -90,7 +90,7 @@ class MarketRun extends Command
  *  - process receives a shutdown signal, OR
  *  - duration (seconds) is reached (default 55s for cron)
  */
-private function startMainLoop(int $duration = 55): void
+private function startMainLoop(int $duration = 36055): void
 {
     $tickCount     = 0;
     $lastStatsTime = time();
