@@ -20,6 +20,7 @@ use App\Http\Controllers\Admin\PaymentMethodController as AdminPaymentMethodCont
 use App\Http\Controllers\Admin\AdminLogsController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PaymentMethodController;
+use App\Http\Controllers\MarketDataController;
 use Illuminate\Support\Facades\Hash;
 
 /*
@@ -78,6 +79,13 @@ Route::get('/candles/next', [CandleController::class, 'getNextCandle']);
 Route::get('/payment-methods', [PaymentMethodController::class, 'index']);
 Route::get('/payment-methods/{paymentMethod}', [PaymentMethodController::class, 'show']);
 Route::post('/payment-methods/{paymentMethod}/calculate-fee', [PaymentMethodController::class, 'calculateFee']);
+
+// Market data
+Route::get('/market-data/bulk-candles', [MarketDataController::class, 'getBulkCandles']);
+Route::get('/market-data/latest-candles', [MarketDataController::class, 'getLatestCandles']);
+Route::get('/market-data/current-price', [MarketDataController::class, 'getCurrentPrice']);
+Route::get('/market-data/all-pairs', [MarketDataController::class, 'getAllPairsData']);
+Route::get('/market-data/system-status', [MarketDataController::class, 'getSystemStatus']);
 
 // User notifications
 Route::middleware(['auth:sanctum'])->group(function () {
@@ -206,3 +214,8 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
     Route::get('/admin/logs/filters', [AdminLogsController::class, 'filters']);
     Route::get('/admin/logs/export', [AdminLogsController::class, 'export']);
 });
+
+// New Candle API Routes (no auth required for market data)
+Route::get('/candles', [CandleController::class, 'getCandles']);
+Route::get('/price', [CandleController::class, 'getCurrentPrice']);
+Route::get('/stream/candles', [CandleController::class, 'streamCandles']);
