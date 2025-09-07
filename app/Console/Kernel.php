@@ -14,7 +14,7 @@ class Kernel extends ConsoleKernel
     {
         $schedule->command('market:run --base=1 --duration=55')
         ->everyMinute()
-        ->withoutOverlapping()
+        // ->withoutOverlapping()
         ->appendOutputTo(storage_path('logs/market.log'));
     }
 
