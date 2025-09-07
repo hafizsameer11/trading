@@ -12,14 +12,10 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule): void
     {
-        // Settle expired trades every minute
-        $schedule->command('trades:settle-expired')->everyMinute();
-        
-        // Generate market data every 30 seconds for 1-minute timeframe
-        $schedule->command('market:generate-data --timeframe=60')->everyThirtySeconds();
-        
-        // Generate market data every 5 minutes for 5-minute timeframe
-        $schedule->command('market:generate-data --timeframe=300')->everyFiveMinutes();
+        $schedule->command('market:run --base=1 --duration=55')
+        ->everyMinute()
+        ->withoutOverlapping()
+        ->appendOutputTo(storage_path('logs/market.log'));
     }
 
     /**

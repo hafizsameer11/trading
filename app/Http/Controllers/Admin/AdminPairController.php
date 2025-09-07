@@ -41,6 +41,8 @@ class AdminPairController extends Controller
             'base_currency' => 'nullable|string|max:10',
             'quote_currency' => 'nullable|string|max:10',
             'price_precision' => 'integer|min:0|max:8',
+            'min_price' => 'nullable|numeric|min:0',
+            'max_price' => 'nullable|numeric|min:0',
             'meta' => 'nullable|array',
         ]);
 
@@ -56,6 +58,8 @@ class AdminPairController extends Controller
             'base_currency' => $request->base_currency,
             'quote_currency' => $request->quote_currency,
             'price_precision' => $request->price_precision ?? 5,
+            'min_price' => $request->min_price,
+            'max_price' => $request->max_price,
             'meta' => $request->meta,
         ]);
 
