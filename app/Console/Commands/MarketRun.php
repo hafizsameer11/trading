@@ -53,9 +53,9 @@ class MarketRun extends Command
             pcntl_signal(SIGINT,  [$this, 'handleShutdown']);
         }
         $duration = (int) $this->option('duration');
-        if ($duration < 5 || $duration > 58) {
-            $duration = 55; // keep a little headroom for cron-per-minute
-        }
+        // if ($duration < 5 || $duration > 58) {
+        //     $duration = 55; // keep a little headroom for cron-per-minute
+        // }
 
         try {
             $this->initializeSystem();
