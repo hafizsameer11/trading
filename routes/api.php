@@ -213,9 +213,28 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
     Route::get('/admin/logs/stats', [AdminLogsController::class, 'stats']);
     Route::get('/admin/logs/filters', [AdminLogsController::class, 'filters']);
     Route::get('/admin/logs/export', [AdminLogsController::class, 'export']);
+    
+    // Forced Trade Results
+    Route::get('/admin/forced-trades', [App\Http\Controllers\Admin\ForcedTradeController::class, 'index']);
+    Route::get('/admin/forced-trades/pending', [App\Http\Controllers\Admin\ForcedTradeController::class, 'getPendingTrades']);
+    Route::get('/admin/forced-trades/forced', [App\Http\Controllers\Admin\ForcedTradeController::class, 'getForcedTrades']);
+    Route::post('/admin/forced-trades/force', [App\Http\Controllers\Admin\ForcedTradeController::class, 'forceResult']);
+    Route::delete('/admin/forced-trades/remove', [App\Http\Controllers\Admin\ForcedTradeController::class, 'removeForcedResult']);
 });
 
-// New Candle API Routes (no auth required for market data)
-Route::get('/candles', [CandleController::class, 'getCandles']);
-Route::get('/price', [CandleController::class, 'getCurrentPrice']);
-Route::get('/stream/candles', [CandleController::class, 'streamCandles']);
+// User notification routes
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/notifications', [App\Http\Controllers\NotificationController::class, 'index']);
+    Route::post('/notifications/{notification}/read', [App\Http\Controllers\NotificationController::class, 'markAsRead']);
+    Route::post('/notifications/read-all', [App\Http\Controllers\NotificationController::class, 'markAllAsRead']);
+    Route::get('/notifications/unread-count', [App\Http\Controllers\NotificationController::class, 'unreadCount']);
+    Route::get('/notifications/stream', [App\Http\Controllers\NotificationController::class, 'stream']);
+});
+
+// Live Market API Routes (no auth required for market data)
+Route::get('/live-market/price', [App\Http\Controllers\LiveMarketController::class, 'getRealTimePrice']);
+Route::get('/live-market/candles', [App\Http\Controllers\LiveMarketController::class, 'getHistoricalCandles']);
+Route::get('/live-market/chart-data', [App\Http\Controllers\LiveMarketController::class, 'getChartData']);
+Route::get('/live-market/pairs', [App\Http\Controllers\LiveMarketController::class, 'getAvailablePairs']);
+Route::get('/live-market/status', [App\Http\Controllers\LiveMarketController::class, 'getMarketStatus']);
+

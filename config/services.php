@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    'twelvedata' => [
+        'api_key' => env('TWELVEDATA_API_KEY', '363dffbad41346babf195af4fa9ed6d7'),
+    ],
+
 ];

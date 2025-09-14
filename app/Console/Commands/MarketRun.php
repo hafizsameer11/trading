@@ -106,8 +106,8 @@ private function startMainLoop(int $duration = 36055): void
             $pairs  = $this->activePairs();
             $nowTs  = time();
 
-            // sane bounds for tick interval
-            $tickMs = (int) max(100, min(5000, $system['otc_tick_ms'] ?? 1000));
+            // More responsive tick interval for better candle synchronization
+            $tickMs = (int) max(50, min(1000, $system['otc_tick_ms'] ?? 500));
 
             foreach ($pairs as $pair) {
                 // 1) Build price (zig-zag step + soft win-rate + gentle nudge)
@@ -208,7 +208,33 @@ private function startMainLoop(int $duration = 36055): void
             ->where('expiry_at', '<=', $windowEnd)
             ->get(['id','direction','entry_price','expiry_at']);
 
-        if ($expiring->isEmpty()) {
+        // Also check for any old expired trades that are still PENDING (fallback)
+        $oldExpired = Trade::query()
+            ->where('pair_id', $pair->id)
+            ->where('result', 'PENDING')
+            ->where('expiry_at', '<', $windowStart)
+            ->get(['id','direction','entry_price','expiry_at']);
+
+        // Combine both sets
+        $allExpiring = $expiring->concat($oldExpired);
+
+        // Check for forced results first
+        foreach ($allExpiring as $trade) {
+            $forcedResult = \App\Models\ForcedTradeResult::getForcedResult($trade->id);
+            if ($forcedResult) {
+                // Apply forced result
+                $this->applyForcedTradeResult($trade, $forcedResult, $finalPrice);
+                // Mark forced result as applied
+                \App\Models\ForcedTradeResult::where('trade_id', $trade->id)->first()?->markAsApplied();
+            }
+        }
+
+        // Filter out trades that had forced results
+        $allExpiring = $allExpiring->filter(function ($trade) {
+            return !\App\Models\ForcedTradeResult::hasForcedResult($trade->id);
+        });
+
+        if ($allExpiring->isEmpty()) {
             return $finalPrice;
         }
 
@@ -224,12 +250,12 @@ private function startMainLoop(int $duration = 36055): void
         $totalSoFar = $todayTrades->count();
 
         $targetFrac = max(0.0, min(1.0, ((float)($system['daily_win_percent'] ?? 50.0))/100.0));
-        $neededWins = $this->winsNeededForBatch($winsSoFar, $totalSoFar, $expiring->count(), $targetFrac);
+        $neededWins = $this->winsNeededForBatch($winsSoFar, $totalSoFar, $allExpiring->count(), $targetFrac);
 
         $preClose = $finalPrice;
 
         // Score trades by distance to flip to WIN from preClose
-        $scored = $expiring->map(function ($t) use ($preClose) {
+        $scored = $allExpiring->map(function ($t) use ($preClose) {
             $e = (float)$t->entry_price;
             $need = ($t->direction === 'UP')
                 ? max(0.0, ($e - $preClose) + 1e-12)     // need close > entry
@@ -238,7 +264,7 @@ private function startMainLoop(int $duration = 36055): void
         })->sortBy('need')->values();
 
         $assignWins = $scored->take($neededWins)->pluck('trade');
-        $assignLose = $expiring->reject(fn($t) => $assignWins->contains('id', $t->id))->values();
+        $assignLose = $allExpiring->reject(fn($t) => $assignWins->contains('id', $t->id))->values();
 
         // Build constraints for a single closing price
         $precision = max(0, (int)$pair->price_precision);
@@ -318,23 +344,99 @@ private function startMainLoop(int $duration = 36055): void
 
         DB::transaction(function () use ($wins, $loses, $target) {
             $now = now();
+            $settledTrades = [];
+            
             if (!empty($wins)) {
+                $winTrades = Trade::whereIn('id', $wins)->with('user')->get();
                 Trade::whereIn('id', $wins)->update([
                     'result'        => 'WIN',
                     'closing_price' => $target,
                     'settled_at'    => $now,
                 ]);
+                
+                // Add to settled trades for notifications
+                foreach ($winTrades as $trade) {
+                    $settledTrades[] = [
+                        'id' => $trade->id,
+                        'user_id' => $trade->user_id,
+                        'result' => 'WIN',
+                        'amount' => $trade->amount,
+                        'pair_symbol' => $trade->pair_symbol,
+                        'direction' => $trade->direction,
+                        'entry_price' => $trade->entry_price,
+                        'closing_price' => $target,
+                        'payout' => $trade->amount * 1.89, // 89% payout
+                    ];
+                }
             }
+            
             if (!empty($loses)) {
+                $loseTrades = Trade::whereIn('id', $loses)->with('user')->get();
                 Trade::whereIn('id', $loses)->update([
                     'result'        => 'LOSE',
                     'closing_price' => $target,
                     'settled_at'    => $now,
                 ]);
+                
+                // Add to settled trades for notifications
+                foreach ($loseTrades as $trade) {
+                    $settledTrades[] = [
+                        'id' => $trade->id,
+                        'user_id' => $trade->user_id,
+                        'result' => 'LOSE',
+                        'amount' => $trade->amount,
+                        'pair_symbol' => $trade->pair_symbol,
+                        'direction' => $trade->direction,
+                        'entry_price' => $trade->entry_price,
+                        'closing_price' => $target,
+                        'payout' => 0,
+                    ];
+                }
+            }
+            
+            // Create notifications for settled trades
+            if (!empty($settledTrades)) {
+                $this->createTradeSettlementNotifications($settledTrades);
             }
         });
 
         return $target;
+    }
+
+    /**
+     * Create notifications for settled trades
+     */
+    private function createTradeSettlementNotifications(array $settledTrades): void
+    {
+        foreach ($settledTrades as $tradeData) {
+            $result = $tradeData['result'];
+            $amount = $tradeData['amount'];
+            $pairSymbol = $tradeData['pair_symbol'];
+            $direction = $tradeData['direction'];
+            $payout = $tradeData['payout'];
+            
+            $title = $result === 'WIN' ? '🎉 Trade Won!' : '❌ Trade Lost';
+            $body = $result === 'WIN' 
+                ? "Your {$direction} trade on {$pairSymbol} won! You earned $" . number_format($payout, 2)
+                : "Your {$direction} trade on {$pairSymbol} lost. Amount: $" . number_format($amount, 2);
+            
+            // Create notification in database
+            \App\Models\Notification::create([
+                'user_id' => $tradeData['user_id'],
+                'title' => $title,
+                'body' => $body,
+                'type' => $result === 'WIN' ? 'success' : 'error',
+                'priority' => 'high',
+                'meta' => json_encode([
+                    'trade_id' => $tradeData['id'],
+                    'result' => $result,
+                    'amount' => $amount,
+                    'payout' => $payout,
+                    'pair_symbol' => $pairSymbol,
+                    'direction' => $direction,
+                ]),
+            ]);
+        }
     }
 
     private function outcomeFor(?float $entry, ?float $close, string $dir, int $precision): string
@@ -352,6 +454,47 @@ private function startMainLoop(int $duration = 36055): void
         $targetWins = (int)round($afterTotal * $target);
         $need       = $targetWins - $winsSoFar;
         return max(0, min($batchSize, $need));
+    }
+
+    /**
+     * Apply a forced trade result.
+     */
+    private function applyForcedTradeResult($trade, string $forcedResult, float $currentPrice): void
+    {
+        $tradeModel = Trade::find($trade->id);
+        if (!$tradeModel) return;
+
+        // Calculate closing price based on forced result
+        $entryPrice = (float)$trade->entry_price;
+        $direction = $trade->direction;
+        
+        // Generate a realistic closing price that matches the forced result
+        if ($forcedResult === 'WIN') {
+            if ($direction === 'UP') {
+                $closingPrice = $entryPrice + mt_rand(5, 20) / 10000; // Small positive move
+            } else {
+                $closingPrice = $entryPrice - mt_rand(5, 20) / 10000; // Small negative move
+            }
+        } else { // LOSS
+            if ($direction === 'UP') {
+                $closingPrice = $entryPrice - mt_rand(5, 20) / 10000; // Small negative move
+            } else {
+                $closingPrice = $entryPrice + mt_rand(5, 20) / 10000; // Small positive move
+            }
+        }
+
+        // Update trade with forced result
+        $tradeModel->update([
+            'result' => $forcedResult,
+            'closing_price' => $closingPrice,
+            'settled_at' => now(),
+        ]);
+
+        // Update user balance
+        $this->updateUserBalance($tradeModel, $forcedResult);
+
+        // Create notification
+        $this->createTradeNotification($tradeModel, $forcedResult);
     }
 
     /**
@@ -407,13 +550,13 @@ private function startMainLoop(int $duration = 36055): void
         if ($ewma <= 0) $ewma = (float)($spot * 1e-5);
 
         // Base sigma and drift per phase
-        $baseSigma = 0.00055;
+        $baseSigma = 0.0015; // Increased for more realistic candle movements
         $sigma = $baseSigma * (0.5 + 0.5 * ($ewma / max(1e-12, $baseSigma * $spot)));
 
         // mean slope in bps (converted to fraction below)
         $bp = match ($s['phase']) {
-            'SWING_UP'   =>  0.05 + 0.20 * $mag,   // 5–25 bps
-            'SWING_DOWN' => -0.05 - 0.20 * $mag,   // -5–-25 bps
+            'SWING_UP'   =>  0.10 + 0.30 * $mag,   // 10–40 bps
+            'SWING_DOWN' => -0.10 - 0.30 * $mag,   // -10–-40 bps
             default      =>  0.00,
         };
 
@@ -549,6 +692,21 @@ private function startMainLoop(int $duration = 36055): void
                 'evening_start'     => $sc->evening_start,
                 'evening_end'       => $sc->evening_end,
                 'trend_strength'    => (float)$sc->trend_strength,
+                // Advanced Market Simulation
+                'support_resistance_enabled' => (bool)$sc->support_resistance_enabled,
+                'order_blocks_enabled' => (bool)$sc->order_blocks_enabled,
+                'fair_value_gaps_enabled' => (bool)$sc->fair_value_gaps_enabled,
+                'fakeout_probability' => (float)$sc->fakeout_probability,
+                // Multi-timeframe settings
+                'active_timeframes' => $sc->active_timeframes,
+                // Advanced win rate controls
+                'base_win_rate' => (float)$sc->base_win_rate,
+                'stake_penalty_factor' => (float)$sc->stake_penalty_factor,
+                'daily_adjustment_factor' => (float)$sc->daily_adjustment_factor,
+                'manual_override_enabled' => (bool)$sc->manual_override_enabled,
+                // Chart behavior
+                'smooth_candle_updates' => (bool)$sc->smooth_candle_updates,
+                'candle_animation_speed' => (int)$sc->candle_animation_speed,
             ];
         });
     }

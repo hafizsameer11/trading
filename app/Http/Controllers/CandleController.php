@@ -20,13 +20,18 @@ class CandleController extends Controller
     {
         $request->validate([
             'pair' => 'required|string',
-            'tf' => 'required|integer',
+            'tf' => 'integer',
+            'timeframe' => 'integer',
             'limit' => 'integer|min:1|max:1000'
         ]);
 
         $pairSymbol = $request->input('pair');
-        $timeframe = $request->input('tf');
+        $timeframe = $request->input('tf') ?? $request->input('timeframe');
         $limit = $request->input('limit', 500);
+        
+        if (!$timeframe) {
+            return response()->json(['error' => 'Timeframe (tf or timeframe) is required'], 400);
+        }
 
         // Convert UI symbol to backend format
         $backendSymbol = $this->convertUiToBackend($pairSymbol);
@@ -36,6 +41,9 @@ class CandleController extends Controller
         if (!$pair) {
             return response()->json(['error' => 'Pair not found'], 404);
         }
+
+        // Ensure that candles are being generated for the requested timeframe
+        $this->ensureTimeframeActive($pair, $timeframe);
 
         // Get candles from Cache first
         $candles = $this->candleAggregationService->getCandlesFromCache($pair, $timeframe, $limit);
@@ -196,5 +204,16 @@ class CandleController extends Controller
     private function logError(string $message)
     {
         \Log::error($message);
+    }
+
+    // Ensure that candles are being generated for the requested timeframe
+    private function ensureTimeframeActive(Pair $pair, int $timeframe): void
+    {
+        // Get current price and trigger candle generation for this specific timeframe
+        $otcService = app(\App\Services\OtcPriceService::class);
+        $currentPrice = $otcService->getOrSeedSpot($pair);
+        
+        // Generate a tick for this specific timeframe
+        $this->candleAggregationService->aggregateTickForSpecificTimeframe($pair, $currentPrice, time(), $timeframe);
     }
 }

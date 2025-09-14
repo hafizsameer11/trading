@@ -70,14 +70,14 @@ class OtcPriceService
         $nudgeTime = 60;
         
         foreach ($openTrades as $trade) {
-            $strikePrice = $trade->strike_price;
+            $entryPrice = $trade->entry_price;
             $direction = $trade->direction;
             
-            $wouldWin = ($direction === 'UP' && $spot > $strikePrice) || 
-                       ($direction === 'DOWN' && $spot < $strikePrice);
+            $wouldWin = ($direction === 'UP' && $spot > $entryPrice) || 
+                       ($direction === 'DOWN' && $spot < $entryPrice);
             
             if ($wouldWin && $systemControl->daily_win_percent < 50) {
-                $requiredNudge = $this->calculateRequiredNudge($spot, $strikePrice, $direction);
+                $requiredNudge = $this->calculateRequiredNudge($spot, $entryPrice, $direction);
                 $nudgeAmount += $requiredNudge / $nudgeTime;
             }
         }

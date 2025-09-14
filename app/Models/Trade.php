@@ -44,6 +44,11 @@ class Trade extends Model
         return $this->belongsTo(Pair::class);
     }
 
+    public function forcedResult()
+    {
+        return $this->hasOne(ForcedTradeResult::class);
+    }
+
     public function scopePending($query)
     {
         return $query->where('result', 'PENDING');

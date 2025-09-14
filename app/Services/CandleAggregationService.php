@@ -13,11 +13,69 @@ class CandleAggregationService
         5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 14400
     ];
 
+    // Get active timeframes from pending trades and recently requested timeframes
+    private function getActiveTimeframes(): array
+    {
+        $activeTimeframes = [];
+        
+        // Get all pending trades and their timeframes
+        $trades = DB::table('trades')
+            ->where('result', 'PENDING')
+            ->select('timeframe_sec')
+            ->distinct()
+            ->get();
+            
+        foreach ($trades as $trade) {
+            $activeTimeframes[] = $trade->timeframe_sec;
+        }
+        
+        // Get recently requested timeframes from cache (last 5 minutes)
+        $recentTimeframes = Cache::get('recent_timeframes', []);
+        foreach ($recentTimeframes as $timeframe => $timestamp) {
+            if (time() - $timestamp < 300) { // 5 minutes
+                $activeTimeframes[] = $timeframe;
+            }
+        }
+        
+        // Always include common timeframes that are actively used
+        $commonTimeframes = [5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200];
+        $activeTimeframes = array_unique(array_merge($activeTimeframes, $commonTimeframes));
+        
+        // Sort by timeframe for consistent processing
+        sort($activeTimeframes);
+        
+        return array_values($activeTimeframes);
+    }
+
+    // Force finalize candles for specific timeframes (useful for trade settlement)
+    public function finalizeCandlesForTimeframes(Pair $pair, array $timeframes, int $timestamp): void
+    {
+        foreach ($timeframes as $timeframe) {
+            $redisKey = "candle:{$pair->id}:{$timeframe}";
+            $currentCandle = Cache::get($redisKey);
+            
+            if ($currentCandle) {
+                $candle = json_decode($currentCandle, true);
+                $this->finalizeCandle($pair, $timeframe, $candle);
+                Cache::forget($redisKey);
+            }
+        }
+    }
+
     public function aggregateTickIntoAllBuckets(Pair $pair, float $price, int $timestamp): void
     {
-        foreach ($this->timeframes as $tf) {
+        // Use active timeframes based on pending trades
+        $activeTimeframes = $this->getActiveTimeframes();
+        
+        foreach ($activeTimeframes as $tf) {
             $this->aggregateTickForTimeframe($pair, $price, $timestamp, $tf);
         }
+    }
+
+    // New method to aggregate tick for specific timeframe only
+    public function aggregateTickForSpecificTimeframe(Pair $pair, float $price, int $timestamp, int $timeframe): void
+    {
+        $this->aggregateTickForTimeframe($pair, $price, $timestamp, $timeframe);
     }
 
     private function aggregateTickForTimeframe(Pair $pair, float $price, int $timestamp, int $timeframe): void
@@ -66,6 +124,15 @@ class CandleAggregationService
         
         // Save back to Cache
         Cache::put($redisKey, json_encode($candle), 3600);
+        
+        // For very short timeframes (5-30 seconds), check if we should finalize immediately
+        if ($timeframe <= 30) {
+            $nextBucket = $bucket + $timeframe;
+            if ($timestamp >= $nextBucket - 1) { // Finalize 1 second before next bucket
+                $this->finalizeCandle($pair, $timeframe, $candle);
+                Cache::forget($redisKey);
+            }
+        }
     }
 
     private function finalizeCandle(Pair $pair, int $timeframe, array $candle): void

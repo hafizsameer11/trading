@@ -110,6 +110,10 @@ class TradeController extends Controller
                 'payout_rate' => 1.7, // 70% payout
             ]);
 
+            // Trigger immediate candle update for the new timeframe
+            $candleService = app(\App\Services\CandleAggregationService::class);
+            $candleService->aggregateTickIntoAllBuckets($pair, $currentPrice, time());
+
             DB::commit();
 
             return response()->json([
