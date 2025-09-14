@@ -36,30 +36,9 @@ return new class extends Migration
     /**
      * Reverse the migrations.
      */
-    public function down(): void
-    {
-        Schema::table('system_controls', function (Blueprint $table) {
-            $table->dropColumn([
-                'support_resistance_enabled',
-                'order_blocks_enabled',
-                'fair_value_gaps_enabled',
-                'fakeout_probability',
-                'active_timeframes',
-                'base_win_rate',
-                'stake_penalty_factor',
-                'daily_adjustment_factor',
-                'manual_override_enabled',
-                'smooth_candle_updates',
-                'candle_animation_speed'
-            ]);
-        });
-    }
-};
+ 
             // Chart behavior
-            $table->boolean('smooth_candle_updates')->default(true)->after('manual_override_enabled');
-            $table->integer('candle_animation_speed')->default(1000)->after('smooth_candle_updates');
-        });
-    }
+   
 
     /**
      * Reverse the migrations.
@@ -83,31 +62,5 @@ return new class extends Migration
         });
     }
 };
-            // Chart behavior
-            $table->boolean('smooth_candle_updates')->default(true)->after('manual_override_enabled');
-            $table->integer('candle_animation_speed')->default(1000)->after('smooth_candle_updates');
-        });
-    }
-
-    /**
-     * Reverse the migrations.
-     */
-    public function down(): void
-    {
-        Schema::table('system_controls', function (Blueprint $table) {
-            $table->dropColumn([
-                'support_resistance_enabled',
-                'order_blocks_enabled',
-                'fair_value_gaps_enabled',
-                'fakeout_probability',
-                'active_timeframes',
-                'base_win_rate',
-                'stake_penalty_factor',
-                'daily_adjustment_factor',
-                'manual_override_enabled',
-                'smooth_candle_updates',
-                'candle_animation_speed'
-            ]);
-        });
-    }
-};
+   
+ 

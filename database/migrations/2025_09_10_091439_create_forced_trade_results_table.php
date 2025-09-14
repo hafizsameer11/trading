@@ -36,20 +36,3 @@ return new class extends Migration
     }
 };
 
-    /**
-     * Reverse the migrations.
-     */
-    public function down(): void
-    {
-        Schema::dropIfExists('forced_trade_results');
-    }
-};
-
-    /**
-     * Reverse the migrations.
-     */
-    public function down(): void
-    {
-        Schema::dropIfExists('forced_trade_results');
-    }
-};
